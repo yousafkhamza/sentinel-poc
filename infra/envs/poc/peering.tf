@@ -15,7 +15,7 @@ module "cross_vpc_sg" {
   source = "../../modules/security-groups"
 
   backend_vpc_id                 = module.vpc_backend.vpc_id
-  backend_node_security_group_id = module.eks_backend.node_security_group_id
+  backend_node_security_group_id = module.eks_backend.cluster_security_group_id
   gateway_vpc_cidr               = var.gateway_vpc_cidr
   backend_app_port               = 8080
 }
