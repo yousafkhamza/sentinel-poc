@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: terraform-poc-state
+  cancel-in-progress: false
+
 env:
   TF_WORKING_DIR: infra/envs/poc
   AWS_REGION: us-east-2
