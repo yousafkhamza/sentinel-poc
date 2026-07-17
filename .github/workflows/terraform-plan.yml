@@ -5,15 +5,14 @@ on:
     paths:
       - "infra/envs/poc/**"
       - "infra/modules/**"
-  push:
-    branches: [main]
-    paths:
-      - "infra/envs/poc/**"
-      - "infra/modules/**"
 
 permissions:
   contents: read
   pull-requests: write
+
+concurrency:
+  group: terraform-poc-state
+  cancel-in-progress: false
 
 env:
   TF_WORKING_DIR: infra/envs/poc

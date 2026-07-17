@@ -6,6 +6,5 @@ backend_vpc_cidr = "10.1.0.0/16"
 
 eks_public_access_cidrs = ["0.0.0.0/0"]
 
-kubernetes_version  = "1.35"
+kubernetes_version  = "1.36"
 node_instance_types = ["t3.medium"]
-

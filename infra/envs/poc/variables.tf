@@ -26,7 +26,7 @@ variable "eks_public_access_cidrs" {
 
 variable "kubernetes_version" {
   type    = string
-  default = "1.30"
+  default = "1.36"
 }
 
 variable "node_instance_types" {
