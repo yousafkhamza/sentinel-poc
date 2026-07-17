@@ -49,9 +49,11 @@ jobs:
       - name: Update kubeconfig for eks-backend
         run: aws eks update-kubeconfig --name ${{ env.BACKEND_CLUSTER }} --region ${{ env.AWS_REGION }}
 
+      - name: Ensure namespace exists
+        run: kubectl apply -f k8s/backend/namespace.yaml
+
       - name: Dry-run apply
         run: |
-          kubectl apply --dry-run=server -f k8s/backend/namespace.yaml
           kubectl apply --dry-run=server -f k8s/backend/deployment.yaml
           kubectl apply --dry-run=server -f k8s/backend/service.yaml
           kubectl apply --dry-run=server -f k8s/backend/networkpolicy.yaml
@@ -100,9 +102,11 @@ jobs:
           envsubst < k8s/gateway/configmap.yaml.tmpl > k8s/gateway/configmap.yaml
           cat k8s/gateway/configmap.yaml
 
+      - name: Ensure namespace exists
+        run: kubectl apply -f k8s/gateway/namespace.yaml
+
       - name: Dry-run apply
         run: |
-          kubectl apply --dry-run=server -f k8s/gateway/namespace.yaml
           kubectl apply --dry-run=server -f k8s/gateway/configmap.yaml
           kubectl apply --dry-run=server -f k8s/gateway/deployment.yaml
           kubectl apply --dry-run=server -f k8s/gateway/service.yaml
