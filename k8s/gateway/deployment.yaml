@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sentinel-gateway-proxy
+  namespace: sentinel-gateway
+  labels:
+    app: sentinel-gateway-proxy
+    layer: gateway
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: sentinel-gateway-proxy
+  template:
+    metadata:
+      labels:
+        app: sentinel-gateway-proxy
+        layer: gateway
+        role: trusted-client
+    spec:
+      containers:
+        - name: nginx-proxy
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: nginx-conf
+              mountPath: /etc/nginx/conf.d
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 80
+            initialDelaySeconds: 3
+            periodSeconds: 5
+      volumes:
+        - name: nginx-conf
+          configMap:
+            name: nginx-proxy-conf

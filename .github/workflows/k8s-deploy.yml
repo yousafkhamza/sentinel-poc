@@ -1,0 +1,127 @@
+name: K8s Validate & Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "k8s/**"
+  workflow_call: {}
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-2
+  GATEWAY_CLUSTER: eks-gateway
+  BACKEND_CLUSTER: eks-backend
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kubeconform
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz | tar xz
+          sudo mv kubeconform /usr/local/bin/
+
+      - name: Validate backend manifests
+        run: kubeconform -strict -ignore-missing-schemas -summary k8s/backend/*.yaml
+
+      - name: Validate gateway manifests (excluding templated configmap)
+        run: kubeconform -strict -ignore-missing-schemas -summary k8s/gateway/namespace.yaml k8s/gateway/deployment.yaml k8s/gateway/service.yaml
+
+  deploy-backend:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig for eks-backend
+        run: aws eks update-kubeconfig --name ${{ env.BACKEND_CLUSTER }} --region ${{ env.AWS_REGION }}
+
+      - name: Dry-run apply
+        run: |
+          kubectl apply --dry-run=server -f k8s/backend/namespace.yaml
+          kubectl apply --dry-run=server -f k8s/backend/deployment.yaml
+          kubectl apply --dry-run=server -f k8s/backend/service.yaml
+          kubectl apply --dry-run=server -f k8s/backend/networkpolicy.yaml
+
+      - name: Apply backend manifests
+        run: kubectl apply -f k8s/backend/
+
+      - name: Wait for backend NLB hostname
+        id: backend-lb
+        run: |
+          echo "Waiting for internal NLB provisioning..."
+          for i in $(seq 1 30); do
+            HOST=$(kubectl get svc sentinel-backend -n sentinel-backend -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' || true)
+            if [ -n "$HOST" ]; then
+              echo "backend_host=$HOST" >> "$GITHUB_OUTPUT"
+              echo "Backend NLB hostname: $HOST"
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "Timed out waiting for backend NLB hostname" >&2
+          exit 1
+    outputs:
+      backend_host: ${{ steps.backend-lb.outputs.backend_host }}
+
+  deploy-gateway:
+    needs: deploy-backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig for eks-gateway
+        run: aws eks update-kubeconfig --name ${{ env.GATEWAY_CLUSTER }} --region ${{ env.AWS_REGION }}
+
+      - name: Render gateway nginx configmap with backend host
+        env:
+          BACKEND_HOST: ${{ needs.deploy-backend.outputs.backend_host }}
+        run: |
+          envsubst < k8s/gateway/configmap.yaml.tmpl > k8s/gateway/configmap.yaml
+          cat k8s/gateway/configmap.yaml
+
+      - name: Dry-run apply
+        run: |
+          kubectl apply --dry-run=server -f k8s/gateway/namespace.yaml
+          kubectl apply --dry-run=server -f k8s/gateway/configmap.yaml
+          kubectl apply --dry-run=server -f k8s/gateway/deployment.yaml
+          kubectl apply --dry-run=server -f k8s/gateway/service.yaml
+
+      - name: Apply gateway manifests
+        run: |
+          kubectl apply -f k8s/gateway/namespace.yaml
+          kubectl apply -f k8s/gateway/configmap.yaml
+          kubectl apply -f k8s/gateway/deployment.yaml
+          kubectl apply -f k8s/gateway/service.yaml
+
+      - name: Wait for public LB and print URL
+        run: |
+          for i in $(seq 1 30); do
+            HOST=$(kubectl get svc sentinel-gateway-proxy -n sentinel-gateway -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' || true)
+            if [ -n "$HOST" ]; then
+              echo "Gateway public URL: http://$HOST"
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "Timed out waiting for gateway public hostname" >&2
+          exit 1

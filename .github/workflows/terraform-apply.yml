@@ -1,0 +1,59 @@
+name: Terraform Apply
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/envs/poc/**"
+      - "infra/modules/**"
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  TF_WORKING_DIR: infra/envs/poc
+  AWS_REGION: us-east-2
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    environment: poc
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.11.4"
+
+      - name: Terraform init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init -input=false
+
+      - name: Terraform apply
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform apply -input=false -auto-approve
+
+      - name: Save outputs
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform output -json > tf-outputs.json
+
+      - name: Upload outputs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tf-outputs
+          path: ${{ env.TF_WORKING_DIR }}/tf-outputs.json
+          retention-days: 7
+
+  trigger-k8s-deploy:
+    needs: apply
+    uses: ./.github/workflows/k8s-deploy.yml
+    secrets: inherit

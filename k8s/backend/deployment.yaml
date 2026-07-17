@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sentinel-backend
+  namespace: sentinel-backend
+  labels:
+    app: sentinel-backend
+    layer: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: sentinel-backend
+  template:
+    metadata:
+      labels:
+        app: sentinel-backend
+        layer: backend
+    spec:
+      containers:
+        - name: backend
+          image: hashicorp/http-echo:1.0
+          args:
+            - "-text=Hello from backend"
+            - "-listen=:8080"
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10

@@ -1,0 +1,20 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sentinel-backend-restrict-ingress
+  namespace: sentinel-backend
+spec:
+  podSelector:
+    matchLabels:
+      app: sentinel-backend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              role: trusted-client
+      ports:
+        - protocol: TCP
+          port: 8080
