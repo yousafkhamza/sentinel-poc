@@ -99,7 +99,7 @@ jobs:
         env:
           BACKEND_HOST: ${{ needs.deploy-backend.outputs.backend_host }}
         run: |
-          envsubst < k8s/gateway/configmap.yaml.tmpl > k8s/gateway/configmap.yaml
+          envsubst '${BACKEND_HOST}' < k8s/gateway/configmap.yaml.tmpl > k8s/gateway/configmap.yaml
           cat k8s/gateway/configmap.yaml
 
       - name: Ensure namespace exists
